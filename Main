@@ -158,8 +158,8 @@ class NFTMetadataExtractor:
 
 def main():
     # Configuration
-    API_KEY = "e7b60b97-4165-4557-9de1-4a27d274a7ff"
-    WALLET_ADDRESS = "D1QEPRL4AqaHoWFcqcPjebdygoa4cTkpdW9sJBHN58HD"
+    API_KEY = "b3e13fd5-d6a6-44ac-9860-6ceb4bfbeb6b"
+    WALLET_ADDRESS = "2yDeCKeFbjiwHhCvRohd2groXGaLVZNkrZLTTkiuTp2d"
     
     # Initialize extractor
     extractor = NFTMetadataExtractor(API_KEY, WALLET_ADDRESS)
