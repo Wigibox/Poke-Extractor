@@ -1,10 +1,7 @@
 #!/usr/bin/env python3
-"""
-NFT Metadata Extractor for Solana Wallet
-Extracts metadata from NFTs with names starting with years 1990-2025
-Uses Helius API and exports to CSV
-"""
 
+import streamlit as st
+import pandas as pd
 import requests
 import csv
 import json
@@ -17,175 +14,123 @@ class NFTMetadataExtractor:
         self.api_key = api_key
         self.wallet_address = wallet_address
         self.base_url = "https://api.helius.xyz/v0"
-        
+
     def get_nft_assets(self) -> List[Dict[str, Any]]:
-        """Fetch all NFT assets from the wallet"""
         url = f"{self.base_url}/addresses/{self.wallet_address}/nfts"
-        params = {
-            'api-key': self.api_key,
-            'page': 1,
-            'limit': 1000  # Adjust if you have more than 1000 NFTs
-        }
-        
+        params = {'api-key': self.api_key, 'page': 1, 'limit': 1000}
         try:
             response = requests.get(url, params=params)
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
-            print(f"Error fetching NFTs: {e}")
+            st.error(f"Error fetching NFTs: {e}")
             return []
-    
+
     def filter_nfts_by_year(self, nfts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Filter NFTs that start with years 1990-2025"""
         filtered_nfts = []
         year_pattern = re.compile(r'^(199[0-9]|20[01][0-9]|202[0-5])')
-        
         for nft in nfts:
-            # Check various possible name fields
-            name = None
+            name = ''
             if 'content' in nft and 'metadata' in nft['content']:
                 metadata = nft['content']['metadata']
-                name = metadata.get('name') or metadata.get('title')
-            
+                name = metadata.get('name') or metadata.get('title', '')
             if not name and 'content' in nft:
-                name = nft['content'].get('name')
-            
+                name = nft['content'].get('name', '')
             if not name:
                 name = nft.get('name', '')
-            
             if name and year_pattern.match(str(name)):
                 filtered_nfts.append(nft)
-                print(f"Found matching NFT: {name}")
-        
         return filtered_nfts
-    
+
     def flatten_metadata(self, nft: Dict[str, Any]) -> Dict[str, Any]:
-        """Flatten NFT metadata into a single-level dictionary"""
         flattened = {}
-        
-        # Basic NFT info
         flattened['mint_address'] = nft.get('id', '')
         flattened['owner'] = nft.get('ownership', {}).get('owner', '')
         flattened['frozen'] = nft.get('ownership', {}).get('frozen', False)
         flattened['delegated'] = nft.get('ownership', {}).get('delegated', False)
-        
-        # Content and metadata
         content = nft.get('content', {})
-        flattened['name'] = content.get('metadata', {}).get('name', '')
-        flattened['symbol'] = content.get('metadata', {}).get('symbol', '')
-        flattened['description'] = content.get('metadata', {}).get('description', '')
-        flattened['image'] = content.get('metadata', {}).get('image', '')
-        flattened['animation_url'] = content.get('metadata', {}).get('animation_url', '')
-        flattened['external_url'] = content.get('metadata', {}).get('external_url', '')
-        
-        # Attributes/traits
-        attributes = content.get('metadata', {}).get('attributes', [])
+        metadata = content.get('metadata', {})
+        flattened['name'] = metadata.get('name', '')
+        flattened['symbol'] = metadata.get('symbol', '')
+        flattened['description'] = metadata.get('description', '')
+        flattened['image'] = metadata.get('image', '')
+        flattened['animation_url'] = metadata.get('animation_url', '')
+        flattened['external_url'] = metadata.get('external_url', '')
+        attributes = metadata.get('attributes', [])
         if isinstance(attributes, list):
             for i, attr in enumerate(attributes):
                 if isinstance(attr, dict):
                     trait_type = attr.get('trait_type', f'attribute_{i}')
                     value = attr.get('value', '')
-                    # Clean trait_type for CSV column name
                     clean_trait = re.sub(r'[^\w\s-]', '', str(trait_type)).strip().replace(' ', '_')
                     flattened[f'trait_{clean_trait}'] = value
-        
-        # Collection info
         grouping = nft.get('grouping', [])
         for group in grouping:
             if group.get('group_key') == 'collection':
                 flattened['collection_address'] = group.get('group_value', '')
                 break
-        
-        # Royalty info
         royalty = nft.get('royalty', {})
         flattened['royalty_percent'] = royalty.get('percent', 0)
         flattened['royalty_locked'] = royalty.get('locked', False)
-        
-        # Supply info
         supply = nft.get('supply', {})
         flattened['supply_print_max_supply'] = supply.get('print_max_supply', 0)
         flattened['supply_print_current_supply'] = supply.get('print_current_supply', 0)
         flattened['supply_edition_nonce'] = supply.get('edition_nonce', '')
-        
-        # Additional metadata fields
-        metadata = content.get('metadata', {})
         for key, value in metadata.items():
             if key not in ['name', 'symbol', 'description', 'image', 'animation_url', 'external_url', 'attributes']:
                 clean_key = re.sub(r'[^\w\s-]', '', str(key)).strip().replace(' ', '_')
-                if isinstance(value, (dict, list)):
-                    flattened[f'metadata_{clean_key}'] = json.dumps(value)
-                else:
-                    flattened[f'metadata_{clean_key}'] = str(value)
-        
+                flattened[f'metadata_{clean_key}'] = json.dumps(value) if isinstance(value, (dict, list)) else str(value)
         return flattened
-    
+
     def export_to_csv(self, nfts: List[Dict[str, Any]], filename: str = None):
-        """Export flattened NFT metadata to CSV"""
         if not nfts:
-            print("No NFTs to export")
-            return
-        
+            st.warning("No NFTs to export")
+            return None
         if filename is None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"nft_metadata_{timestamp}.csv"
-        
-        # Flatten all NFTs and collect all unique fields
         flattened_nfts = []
         all_fields = set()
-        
         for nft in nfts:
             flattened = self.flatten_metadata(nft)
             flattened_nfts.append(flattened)
             all_fields.update(flattened.keys())
-        
-        # Sort fields for consistent column order
         fieldnames = sorted(all_fields)
-        
-        # Write to CSV
         with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
-            
             for nft in flattened_nfts:
-                # Fill missing fields with empty strings
                 row = {field: nft.get(field, '') for field in fieldnames}
                 writer.writerow(row)
-        
-        print(f"Exported {len(flattened_nfts)} NFTs to {filename}")
-        print(f"CSV contains {len(fieldnames)} columns")
-        
         return filename
 
 def main():
-    # Configuration
-    API_KEY = "b3e13fd5-d6a6-44ac-9860-6ceb4bfbeb6b"
-    WALLET_ADDRESS = "2yDeCKeFbjiwHhCvRohd2groXGaLVZNkrZLTTkiuTp2d"
-    
-    # Initialize extractor
-    extractor = NFTMetadataExtractor(API_KEY, WALLET_ADDRESS)
-    
-    print("Fetching NFTs from wallet...")
-    all_nfts = extractor.get_nft_assets()
-    
-    if not all_nfts:
-        print("No NFTs found or error occurred")
-        return
-    
-    print(f"Found {len(all_nfts)} total NFTs")
-    
-    print("Filtering NFTs by year (1990-2025)...")
-    filtered_nfts = extractor.filter_nfts_by_year(all_nfts)
-    
-    if not filtered_nfts:
-        print("No NFTs found with names starting with years 1990-2025")
-        return
-    
-    print(f"Found {len(filtered_nfts)} NFTs matching year criteria")
-    
-    print("Exporting to CSV...")
-    filename = extractor.export_to_csv(filtered_nfts)
-    
-    print(f"\n✅ Export complete! Check {filename}")
+    st.title("NFT Metadata Extractor for Solana Wallet")
+    st.markdown("Fetch and export NFTs from your wallet by year (1990-2025).")
+    api_key = st.text_input("Helius API Key", type="password")
+    wallet_address = st.text_input("Solana Wallet Address")
+    if st.button("Fetch NFTs"):
+        if not api_key or not wallet_address:
+            st.error("Please provide both API Key and Wallet Address.")
+            return
+        extractor = NFTMetadataExtractor(api_key, wallet_address)
+        nfts = extractor.get_nft_assets()
+        if not nfts:
+            st.warning("No NFTs found or an error occurred.")
+            return
+        st.success(f"Found {len(nfts)} NFTs. Filtering by year 1990-2025...")
+        filtered_nfts = extractor.filter_nfts_by_year(nfts)
+        if not filtered_nfts:
+            st.warning("No NFTs found with names starting with years 1990-2025.")
+            return
+        st.success(f"{len(filtered_nfts)} NFTs matched.")
+        filename = extractor.export_to_csv(filtered_nfts)
+        if filename:
+            st.success(f"Export complete: {filename}")
+            df = pd.read_csv(filename)
+            st.dataframe(df)
+            with open(filename, "rb") as f:
+                st.download_button("Download CSV", data=f, file_name=filename, mime="text/csv")
 
 if __name__ == "__main__":
     main()
