@@ -17,7 +17,7 @@ class NFTMetadataExtractor:
 
     def get_nft_assets(self) -> List[Dict[str, Any]]:
         url = f"{self.base_url}/addresses/{self.wallet_address}/nfts"
-        params = {'api-key': self.api_key, 'page': 1, 'limit': 100}
+        params = {'api-key': self.api_key, 'page': 1, 'limit': 1000}
         try:
             response = requests.get(url, params=params)
             response.raise_for_status()
