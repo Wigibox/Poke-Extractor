@@ -17,7 +17,7 @@ class NFTMetadataExtractor:
 
     def get_nft_assets(self) -> List[Dict[str, Any]]:
         url = f"{self.base_url}/addresses/{self.wallet_address}/nfts"
-        params = {'api-key': self.api_key, 'page': 1, 'limit': 1000}
+        params = {'api-key': self.api_key, 'page': 1, 'limit': 100}
         try:
             response = requests.get(url, params=params)
             response.raise_for_status()
@@ -116,7 +116,6 @@ def main():
         extractor = NFTMetadataExtractor(api_key, wallet_address)
         nfts = extractor.get_nft_assets()
         if not nfts:
-            st.warning("No NFTs found or an error occurred.")
             return
         st.success(f"Found {len(nfts)} NFTs. Filtering by year 1990-2025...")
         filtered_nfts = extractor.filter_nfts_by_year(nfts)
