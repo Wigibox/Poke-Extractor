@@ -13,7 +13,7 @@ class NFTMetadataExtractor:
     def __init__(self, api_key: str, wallet_address: str):
         self.api_key = api_key
         self.wallet_address = wallet_address
-        self.base_url = "https://mainnet.helius-rpc.com/"
+        self.base_url = f"https://mainnet.helius-rpc.com/?api-key={self.api_key}"
 
     def get_assets_by_owner(self) -> List[str]:
         headers = {"Content-Type": "application/json"}
