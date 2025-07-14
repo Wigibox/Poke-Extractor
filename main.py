@@ -13,31 +13,52 @@ class NFTMetadataExtractor:
     def __init__(self, api_key: str, wallet_address: str):
         self.api_key = api_key
         self.wallet_address = wallet_address
-        self.base_url = "https://api.helius.xyz/v0"
+        self.base_url = "https://mainnet.helius-rpc.com/"
 
-    def get_nft_assets(self) -> List[Dict[str, Any]]:
-        url = f"{self.base_url}/addresses/{self.wallet_address}/nfts"
-        params = {'api-key': self.api_key, 'page': 1, 'limit': 1000}
+    def get_assets_by_owner(self) -> List[str]:
+        headers = {"Content-Type": "application/json"}
+        payload = {
+            "jsonrpc": "2.0",
+            "id": "1",
+            "method": "getAssetsByOwner",
+            "params": {
+                "ownerAddress": self.wallet_address,
+                "page": 1,
+                "limit": 1000
+            }
+        }
         try:
-            response = requests.get(url, params=params)
+            response = requests.post(self.base_url, headers=headers, json=payload)
             response.raise_for_status()
-            return response.json()
+            data = response.json()
+            return [item['id'] for item in data.get('result', {}).get('items', [])]
         except requests.exceptions.RequestException as e:
-            st.error(f"Error fetching NFTs: {e}")
+            st.error(f"Error fetching asset IDs: {e}")
             return []
+
+    def get_asset_by_id(self, asset_id: str) -> Dict[str, Any]:
+        headers = {"Content-Type": "application/json"}
+        payload = {
+            "jsonrpc": "2.0",
+            "id": "1",
+            "method": "getAsset",
+            "params": {
+                "id": asset_id
+            }
+        }
+        try:
+            response = requests.post(self.base_url, headers=headers, json=payload)
+            response.raise_for_status()
+            return response.json().get("result", {})
+        except requests.exceptions.RequestException as e:
+            st.error(f"Error fetching asset: {e}")
+            return {}
 
     def filter_nfts_by_year(self, nfts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         filtered_nfts = []
         year_pattern = re.compile(r'^(199[0-9]|20[01][0-9]|202[0-5])')
         for nft in nfts:
-            name = ''
-            if 'content' in nft and 'metadata' in nft['content']:
-                metadata = nft['content']['metadata']
-                name = metadata.get('name') or metadata.get('title', '')
-            if not name and 'content' in nft:
-                name = nft['content'].get('name', '')
-            if not name:
-                name = nft.get('name', '')
+            name = nft.get('content', {}).get('metadata', {}).get('name') or nft.get('content', {}).get('name') or nft.get('name', '')
             if name and year_pattern.match(str(name)):
                 filtered_nfts.append(nft)
         return filtered_nfts
@@ -114,11 +135,17 @@ def main():
             st.error("Please provide both API Key and Wallet Address.")
             return
         extractor = NFTMetadataExtractor(api_key, wallet_address)
-        nfts = extractor.get_nft_assets()
-        if not nfts:
+        asset_ids = extractor.get_assets_by_owner()
+        if not asset_ids:
+            st.warning("No assets found or an error occurred.")
             return
-        st.success(f"Found {len(nfts)} NFTs. Filtering by year 1990-2025...")
-        filtered_nfts = extractor.filter_nfts_by_year(nfts)
+        all_nfts = []
+        for asset_id in asset_ids:
+            asset = extractor.get_asset_by_id(asset_id)
+            if asset:
+                all_nfts.append(asset)
+        st.success(f"Fetched {len(all_nfts)} assets. Filtering by year 1990-2025...")
+        filtered_nfts = extractor.filter_nfts_by_year(all_nfts)
         if not filtered_nfts:
             st.warning("No NFTs found with names starting with years 1990-2025.")
             return
