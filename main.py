@@ -6,6 +6,7 @@ import requests
 import csv
 import json
 import re
+import time
 from typing import List, Dict, Any
 from datetime import datetime
 
@@ -144,6 +145,7 @@ def main():
             asset = extractor.get_asset_by_id(asset_id)
             if asset:
                 all_nfts.append(asset)
+            time.sleep(0.25)  # Add delay to prevent 429 errors
         st.success(f"Fetched {len(all_nfts)} assets. Filtering by year 1990-2025...")
         filtered_nfts = extractor.filter_nfts_by_year(all_nfts)
         if not filtered_nfts:
